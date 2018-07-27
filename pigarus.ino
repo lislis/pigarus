@@ -1,7 +1,9 @@
 // Pins
 const int fanPin = A0;
 const int pigPin = 9;
-const int motorPin = 10;
+//const int motorPin = 10; // now using h-bridge
+const int motorPull = 6;
+const int motorRelease = 5;
 const int buttonPin = 8;
 const int blueLedPin = 12;
 const int yellowLedPin = 11;
@@ -14,18 +16,18 @@ const long blinkInterval = 1000;
 // Fan
 int filterVal = 10; // q'n'd low pass filter
 int fanVal;
-const int motorThreshold = 100;
+const int motorThreshold = 90;
 
-// Serial output
-bool debug = true;
+// DEBUG
+bool debugFan = false;
 
 // crappy state machine
 struct GameState {
   bool reset = true;
-  unsigned long resetTimer = 10000; // tbd
+  unsigned long resetTimer = 30000; // tbd
   unsigned long resetDt = 0;
   bool win = false;
-  unsigned long winTimer = 5000; // tbd
+  unsigned long winTimer = 8000; // tbd
   unsigned long winDt = 0;
   bool idle = false;
   bool gameloop = false;
@@ -37,7 +39,9 @@ void setup() {
   Serial.begin(9600);
   pinMode(fanPin, INPUT);
   pinMode(pigPin, OUTPUT);
-  pinMode(motorPin, OUTPUT);
+  //pinMode(motorPin, OUTPUT);
+  pinMode(motorPull, OUTPUT);
+  pinMode(motorRelease, OUTPUT);
   pinMode(buttonPin, INPUT_PULLUP);
   pinMode(blueLedPin, OUTPUT);
   pinMode(yellowLedPin, OUTPUT);
@@ -45,18 +49,22 @@ void setup() {
 
   digitalWrite(yellowLedPin, HIGH);
   digitalWrite(blueLedPin, HIGH);
-  digitalWrite(pigPin, HIGH);
-  delay(1000);
+  analogWrite(pigPin, 150);
+  delay(2500);
+  Serial.println("Setup done");
+  Serial.println("reset to clean up previous game state");
 }
 
 void loop() {
   unsigned long currentMillis = millis();
   switchOffThings();
-  
-  if (game.reset) {  
+
+  if (game.reset) {
     blinkLED(currentMillis);
+    motorReleasing();
     countDownResetTimer(currentMillis);
   } else if (game.idle) {
+    stopMotor();
     lightLED();
     waitForStartButton(currentMillis);
   } else if (game.gameloop) {
@@ -65,33 +73,53 @@ void loop() {
     moveMotorAndPig();
     waitForWinSwitch();
   } else if (game.win) {
-    // light up sun
+    stopMotor();
+    lightBlueLED();
     countDownWinTimer(currentMillis);
-    Serial.print(game.timeScore);
   }
-  
+
   delay(50);
+}
+
+void motorPulling() {
+  analogWrite(motorPull, 200);
+  digitalWrite(motorRelease, LOW);
+}
+
+void motorReleasing() {
+  analogWrite(motorRelease, 180);
+  digitalWrite(motorPull, LOW);
+}
+
+void stopMotor() {
+  digitalWrite(motorRelease, LOW);
+  analogWrite(motorPull, LOW);
 }
 
 void switchOffThings() {
   digitalWrite(yellowLedPin, LOW);
   digitalWrite(blueLedPin, LOW);
   digitalWrite(pigPin, LOW);
+  digitalWrite(motorPull, LOW);
+  digitalWrite(motorRelease, LOW);
 }
 
 void countDownWinTimer(unsigned long cM) {
-   if (cM - game.winDt >= game.winTimer) {
+  if (cM - game.winDt >= game.winTimer) {
     game.winDt = cM;
     game.win = false;
     game.reset = true;
-  }    
+    Serial.println("reset game");
+  }
 }
 
 void waitForWinSwitch() {
   if (winSwitchPin == 1) {
     game.gameloop = false;
     game.win = true;
-  }  
+    Serial.println("win");
+    Serial.println(game.timeScore);
+  }
 }
 
 void countUpScoreTime(unsigned long cM) {
@@ -99,15 +127,20 @@ void countUpScoreTime(unsigned long cM) {
 }
 
 void waitForStartButton(unsigned long cM) {
-  if (digitalRead(buttonPin) == 1) {
+  if (digitalRead(buttonPin) == 0) {
     game.idle = false;
     game.gameloop = true;
     game.timeScoreDt = cM;
-  }  
+    Serial.println("start game loop");
+  }
 }
 
 void lightLED() {
-   digitalWrite(blueLedPin, HIGH);
+  digitalWrite(yellowLedPin, HIGH);
+}
+
+void lightBlueLED() {
+  digitalWrite(blueLedPin, HIGH);
 }
 
 void countDownResetTimer(unsigned long cM) {
@@ -115,7 +148,8 @@ void countDownResetTimer(unsigned long cM) {
     game.resetDt = cM;
     game.reset = false;
     game.idle = true;
-  } 
+    Serial.println("reset done, idling, PUSH THE BUTTON");
+  }
 }
 
 void blinkLED(unsigned long currentMillis) {
@@ -129,26 +163,26 @@ void blinkLED(unsigned long currentMillis) {
       ledState = LOW;
     }
     digitalWrite(yellowLedPin, ledState);
-  }  
+  }
 }
 
 void readFan() {
   fanVal = analogRead(fanPin);
   filterVal = (fanVal + filterVal) / 2;
-  if (debug) {
-    Serial.print(fanVal);
-    Serial.print(" ,");
-    Serial.print(filterVal);
-    Serial.println(" ,0,1023");
+  if (debugFan) {
+    Serial.print("0, 1023, ");
+    Serial.println(filterVal);
   }
 }
 
 void moveMotorAndPig() {
- if (filterVal >= motorThreshold) {
-    digitalWrite(motorPin, HIGH);
-    digitalWrite(pigPin, HIGH);
+  if (filterVal >= motorThreshold) {
+    //analogWrite(motorPin, 200);
+    motorPulling();
+    analogWrite(pigPin, 150);
   } else {
-    digitalWrite(motorPin, LOW);
+    //digitalWrite(motorPin, LOW);
+    stopMotor();
     digitalWrite(pigPin, LOW);
   }
 }
