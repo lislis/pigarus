@@ -1,7 +1,6 @@
 # Pigarus
 
-Help the flying pig Pigarus get close to the sun!
-
+Help the flying pig Pigarus get close to the sun! With your own breath!
 
 ![Pigarus gif](assets/pigarus.gif)
 
